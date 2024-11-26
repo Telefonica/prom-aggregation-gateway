@@ -68,6 +68,13 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
+      - name: Set lower case owner name
+        id: lower-case
+        run: |
+          echo "repository_owner=${OWNER,,}" >> ${GITHUB_OUTPUT}
+        env:
+          OWNER: ${{ github.repository_owner }}
+
       - name: Build and push the Docker image
         run: |
           ./earthly \
@@ -75,4 +82,4 @@ jobs:
             +build-image-multiarch \
               --version=${{ env.RELEASE_VERSION }} \
               --commitSHA=${{ env.SHORT_SHA }} \
-              --image_name=ghcr.io/${{ github.repository_owner }}/prom-aggregation-gateway
+              --image_name=ghcr.io/${{ steps.lower-case.outputs.repository_owner }}/prom-aggregation-gateway
