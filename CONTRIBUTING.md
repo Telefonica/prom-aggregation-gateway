@@ -56,3 +56,9 @@ Returns the same as above. But if executed again, the `gauge` metrics are cleare
 # TYPE some_metric untyped
 some_metric{job="some_job"} 3.14
 ```
+
+## Run tests
+
+```sh
+go test ./...
+```
