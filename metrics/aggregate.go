@@ -149,7 +149,22 @@ func (a *Aggregate) HandleRender(c *gin.Context) {
 	c.Header("Content-Type", string(contentType))
 	a.encodeAllMetrics(c.Writer, contentType)
 
-	// TODO reset gauges
+	// Remove gauge metrics after serving the response to Prometheus
+	userAgent := c.Request.Header.Get("User-Agent")
+	if strings.Contains(userAgent, "Prometheus/") {
+		a.removeGaugeMetrics()
+	}
+}
+
+func (a *Aggregate) removeGaugeMetrics() {
+	a.familiesLock.Lock()
+	defer a.familiesLock.Unlock()
+
+	for name, family := range a.families {
+		if family.GetType() == dto.MetricType_GAUGE {
+			delete(a.families, name)
+		}
+	}
 }
 
 func (a *Aggregate) encodeAllMetrics(writer io.Writer, contentType expfmt.Format) {

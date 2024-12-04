@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
@@ -65,7 +68,7 @@ histogram_count 1
 counter{job="test"} 60
 # HELP gauge A gauge
 # TYPE gauge gauge
-gauge{job="test"} 99
+gauge{job="test"} 57
 # HELP histogram A histogram
 # TYPE histogram histogram
 histogram_bucket{job="test",le="1"} 0
@@ -118,9 +121,9 @@ ui_external_lib_loaded{name="mixpanel",loaded="true"} 1
 `
 	gaugeOutput = `# HELP ui_external_lib_loaded A gauge with entries in un-sorted order
 # TYPE ui_external_lib_loaded gauge
-ui_external_lib_loaded{job="test",loaded="true",name="Intercom"} 2
-ui_external_lib_loaded{job="test",loaded="true",name="ga"} 2
-ui_external_lib_loaded{job="test",loaded="true",name="mixpanel"} 2
+ui_external_lib_loaded{job="test",loaded="true",name="Intercom"} 1
+ui_external_lib_loaded{job="test",loaded="true",name="ga"} 1
+ui_external_lib_loaded{job="test",loaded="true",name="mixpanel"} 1
 `
 	duplicateLabels = `
 # HELP ui_external_lib_loaded Test with duplicate values
@@ -275,5 +278,49 @@ func BenchmarkConcurrentAggregate(b *testing.B) {
 
 			}
 		})
+	}
+}
+
+func TestRemoveGaugeMetrics(t *testing.T) {
+	a := NewAggregate()
+
+	// Add some metrics to the aggregate
+	a.parseAndMerge(strings.NewReader(`# TYPE gauge_metric gauge
+gauge_metric{label="value"} 123
+# TYPE counter_metric counter
+counter_metric{label="value"} 456
+`), nil)
+
+	// Simulate a scrape with Prometheus user-agent
+	req, err := http.NewRequest("GET", "/metrics", nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating request: %s", err)
+	}
+	req.Header.Set("User-Agent", "Prometheus/2.0")
+
+	// Create a response recorder
+	rr := httptest.NewRecorder()
+
+	// Handle the request
+	router := gin.Default()
+	router.GET("/metrics", a.HandleRender)
+	router.ServeHTTP(rr, req)
+
+	// Check the response code
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	}
+
+	// Check that the gauge metric has been removed
+	a.familiesLock.RLock()
+	defer a.familiesLock.RUnlock()
+
+	if _, exists := a.families["gauge_metric"]; exists {
+		t.Errorf("gauge_metric was not removed")
+	}
+
+	// Check that the counter metric still exists
+	if _, exists := a.families["counter_metric"]; !exists {
+		t.Errorf("counter_metric was removed but it should not have been")
 	}
 }
