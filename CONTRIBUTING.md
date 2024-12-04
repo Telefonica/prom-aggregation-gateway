@@ -50,7 +50,7 @@ some_metric{job="some_job"} 3.14
 curl -H "User-Agent: Prometheus/1.0" http://127.0.0.1:8080/metrics
 ```
 
-Returns the same as above. But if executed again, the `gauge` metrics are cleared:
+Returns the same as above. But if executed again, `gauge` metrics are cleared:
 
 ```
 # TYPE some_metric untyped
